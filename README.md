@@ -102,17 +102,73 @@ When running as a service, configuration and state live in
 
 ## Wiring up LiteLLM
 
-LiteLLM doesn't auto-discover backend models, so keep its config in sync with
-whatever you've pulled:
+LiteLLM doesn't auto-discover backend models, so its config has to be kept in
+sync by hand (or by re-running the command below) whenever models are pulled
+or removed on the local-ai side.
+
+**1. On the local-ai machine** — make sure it's actually reachable and has
+something to serve:
+
+```powershell
+.\bin\local-ai.exe serve              # or: install as a service, see above
+.\bin\local-ai.exe pull <owner>/<repo>:<quant>
+.\bin\local-ai.exe keys create litellm
+```
+
+Save the printed key. If LiteLLM runs on a different machine, open the
+gateway port on the Windows firewall so it's reachable over the LAN:
+
+```powershell
+New-NetFirewallRule -DisplayName "local-ai gateway" -Direction Inbound `
+  -Protocol TCP -LocalPort 11535 -Action Allow
+```
+
+**2. Generate the model list** — from the local-ai machine:
 
 ```powershell
 .\bin\local-ai.exe list --litellm-config
 ```
 
-This prints a ready-to-paste `model_list:` block pointed at this machine's
-gateway, with the API key referenced via `os.environ/LOCAL_AI_API_KEY`
-(export that env var wherever LiteLLM runs, rather than hardcoding the raw
-key in its config).
+This prints a ready-to-paste `model_list:` block, e.g.:
+
+```yaml
+model_list:
+  - model_name: qwen2.5-0.5b-instruct-q4_k_m
+    litellm_params:
+      model: openai/qwen2.5-0.5b-instruct-q4_k_m
+      api_base: http://192.168.1.50:11535/v1
+      api_key: os.environ/LOCAL_AI_API_KEY
+```
+
+**3. On the LiteLLM machine** — drop that block into a `config.yaml` (add a
+`litellm_settings:`/`general_settings:` section as needed for your setup),
+export the key from step 1, and start the proxy:
+
+```bash
+export LOCAL_AI_API_KEY="la_..."          # the key from `keys create`
+pip install 'litellm[proxy]'              # or use LiteLLM's docker image
+litellm --config config.yaml --port 4000
+```
+
+(Docker equivalent: mount `config.yaml` into the container and pass
+`-e LOCAL_AI_API_KEY=la_...` on `docker run`.)
+
+**4. Test it end-to-end** through LiteLLM, not directly against local-ai, to
+confirm the whole chain works:
+
+```bash
+curl http://<litellm-host>:4000/v1/chat/completions \
+  -H "Authorization: Bearer <litellm-master-or-virtual-key>" \
+  -H "content-type: application/json" \
+  -d '{"model":"qwen2.5-0.5b-instruct-q4_k_m","messages":[{"role":"user","content":"hi"}]}'
+```
+
+A response means the request went LiteLLM → local-ai gateway → llama-server
+and back. From here, Langfuse traces this the same way it traces any other
+LiteLLM-proxied model — no local-ai-specific setup needed on that side.
+
+Whenever you `pull`/`rm` a model, re-run step 2 and update LiteLLM's
+`config.yaml` to match.
 
 ## Architecture
 
