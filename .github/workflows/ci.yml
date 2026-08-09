@@ -7,6 +7,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The whole module targets Windows (internal/winsvc is `//go:build
+    # windows`-only), so every step must cross-compile for windows/amd64 —
+    # otherwise packages that import winsvc resolve to zero source files on
+    # the Linux runner's native GOOS.
+    env:
+      GOOS: windows
+      GOARCH: amd64
     steps:
       - uses: actions/checkout@v4
 
@@ -14,16 +21,10 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build (windows/amd64)
-        env:
-          GOOS: windows
-          GOARCH: amd64
+      - name: Build
         run: go build ./...
 
-      - name: Vet (windows/amd64)
-        env:
-          GOOS: windows
-          GOARCH: amd64
+      - name: Vet
         run: go vet ./...
 
       - name: Test
