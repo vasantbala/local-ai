@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+          go build -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/local-ai.exe ./cmd/local-ai
+
+      - name: Package
+        run: |
+          cp README.md LICENSE dist/
+          cd dist
+          zip "local-ai-${GITHUB_REF_NAME}-windows-amd64.zip" local-ai.exe README.md LICENSE
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/local-ai-*-windows-amd64.zip
+          generate_release_notes: true

@@ -15,6 +15,10 @@ import (
 
 var dataDirFlag string
 
+// version is set at build time via -ldflags "-X main.version=...";
+// the release workflow injects the pushed tag name.
+var version = "dev"
+
 func main() {
 	// When the SCM launches us as a service, skip cobra entirely and run
 	// the service handler (which shares the same supervisor+gateway logic
@@ -27,8 +31,9 @@ func main() {
 	}
 
 	root := &cobra.Command{
-		Use:   "local-ai",
-		Short: "Supervise llama-server and expose it as a networked, multi-model LLM host",
+		Use:     "local-ai",
+		Short:   "Supervise llama-server and expose it as a networked, multi-model LLM host",
+		Version: version,
 	}
 	root.PersistentFlags().StringVar(&dataDirFlag, "data-dir", "", "override data directory (default: $LOCAL_AI_DATA_DIR or %PROGRAMDATA%\\local-ai)")
 
